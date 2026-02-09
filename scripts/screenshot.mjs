@@ -1,29 +1,65 @@
 import { chromium } from "playwright";
 import fs from "fs";
 
-const URL = process.env.TARGET_URL;
-const OUT = process.env.OUT_PATH || "docs/shot.jpg";
+const SITES = [
+  { name: "intramagazine", url: "https://intramagazine.com/", out: "docs/intramagazine.jpg" },
+  { name: "issueday",      url: "https://xn--2n1b69z8udca.com/", out: "docs/issueday.jpg" },
+  { name: "kpoppst",       url: "https://kppost.com/", out: "docs/kpoppst.jpg" },
+];
 
-if (!URL) {
-  console.error("TARGET_URL is required");
-  process.exit(1);
-}
+// 공통 옵션 (너가 원하는 썸네일 비율로 바꿔도 됨)
+const VIEWPORT = { width: 1400, height: 900 };
+const SCALE = 2;
 
-(async () => {
-  const browser = await chromium.launch({ args: ["--no-sandbox"] });
-  const page = await browser.newPage({
-    viewport: { width: 1400, height: 900 },
-    deviceScaleFactor: 2,
-  });
+// docs 폴더 없으면 생성
+if (!fs.existsSync("docs")) fs.mkdirSync("docs", { recursive: true });
 
-  await page.goto(URL, { waitUntil: "networkidle", timeout: 60000 });
+async function capture(page, site) {
+  console.log(`\n[${site.name}] goto: ${site.url}`);
+
+  await page.setViewportSize(VIEWPORT);
+  await page.goto(site.url, { waitUntil: "networkidle", timeout: 60000 });
+
+  // 로딩 안정화 (폰트/이미지 늦게 뜨는 사이트 대비)
   await page.waitForTimeout(1500);
 
   // 메인 첫 화면만 캡처 (fullPage: false)
-  await page.screenshot({ path: OUT, fullPage: false, type: "jpeg", quality: 82 });
+  await page.screenshot({
+    path: site.out,
+    fullPage: false,
+    type: "jpeg",
+    quality: 82,
+  });
+
+  console.log(`[${site.name}] saved: ${site.out}`);
+}
+
+(async () => {
+  const browser = await chromium.launch({
+    args: ["--no-sandbox"],
+  });
+
+  const context = await browser.newContext({
+    deviceScaleFactor: SCALE,
+  });
+
+  const page = await context.newPage();
+
+  for (const site of SITES) {
+    try {
+      await capture(page, site);
+    } catch (e) {
+      console.error(`[${site.name}] FAILED:`, e?.message || e);
+      // 한 사이트 실패해도 다음 사이트 계속 진행
+    }
+  }
 
   await browser.close();
 
-  if (!fs.existsSync(OUT)) process.exit(2);
-  console.log("Saved:", OUT);
+  // 결과 파일 존재 체크
+  const missing = SITES.filter(s => !fs.existsSync(s.out)).map(s => s.out);
+  if (missing.length) {
+    console.error("Missing screenshots:", missing);
+    process.exit(2);
+  }
 })();
