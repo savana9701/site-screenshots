@@ -2,8 +2,11 @@ name: Screenshots
 
 on:
   schedule:
-    - cron: "0 */6 * * *"   # 6시간마다
+    - cron: "0 */6 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   shot:
@@ -15,13 +18,35 @@ jobs:
         with:
           node-version: 20
 
+      - name: Show repo files (debug)
+        run: |
+          node -v
+          npm -v
+          ls -al
+          ls -al scripts || true
+          ls -al docs || true
+
       - name: Install deps
         run: |
-          npm ci || npm i
+          npm i
           npx playwright install --with-deps chromium
 
       - name: Take screenshots
         run: node scripts/screenshot.mjs
+
+      - name: List docs (debug)
+        if: always()
+        run: |
+          echo "=== docs ==="
+          ls -al docs || true
+
+      - name: Upload screenshots as artifact (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: docs/*.jpg
+          if-no-files-found: warn
 
       - name: Commit & push if changed
         run: |
