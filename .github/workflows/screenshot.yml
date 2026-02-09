@@ -1,0 +1,34 @@
+name: Screenshots
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # 6시간마다
+  workflow_dispatch:
+
+jobs:
+  shot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: |
+          npm ci || npm i
+          npx playwright install --with-deps chromium
+
+      - name: Take screenshots
+        env:
+          TARGET_URL: "https://YOUR-SITE.com/"
+          OUT_PATH: "docs/shot.jpg"
+        run: node scripts/screenshot.mjs
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/shot.jpg
+          git diff --cached --quiet || (git commit -m "Update screenshot" && git push)
