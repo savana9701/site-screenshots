@@ -21,14 +21,11 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Take screenshots
-        env:
-          TARGET_URL: "https://YOUR-SITE.com/"
-          OUT_PATH: "docs/shot.jpg"
         run: node scripts/screenshot.mjs
 
       - name: Commit & push if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/shot.jpg
-          git diff --cached --quiet || (git commit -m "Update screenshot" && git push)
+          git add docs/*.jpg
+          git diff --cached --quiet || (git commit -m "Update screenshots" && git push)
