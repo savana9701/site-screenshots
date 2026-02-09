@@ -7,7 +7,7 @@ const SITES = [
   { name: "kpoppst",       url: "https://kppost.com/", out: "docs/kpoppst.jpg" },
 ];
 
-// 공통 옵션 (너가 원하는 썸네일 비율로 바꿔도 됨)
+// 공통 옵션 (캡쳐 비율)
 const VIEWPORT = { width: 1400, height: 900 };
 const SCALE = 2;
 
@@ -18,17 +18,19 @@ async function capture(page, site) {
   console.log(`\n[${site.name}] goto: ${site.url}`);
 
   await page.setViewportSize(VIEWPORT);
-  await page.goto(site.url, { waitUntil: "networkidle", timeout: 60000 });
+await page.goto(site.url, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(3000);
+
 
   // 로딩 안정화 (폰트/이미지 늦게 뜨는 사이트 대비)
   await page.waitForTimeout(1500);
 
   // 메인 첫 화면만 캡처 (fullPage: false)
-  await page.screenshot({
+   await page.screenshot({
     path: site.out,
-    fullPage: false,
+    fullPage: true,
     type: "jpeg",
-    quality: 82,
+    quality: 78, // 용량 줄이기(추천). 더 선명 원하면 82~85
   });
 
   console.log(`[${site.name}] saved: ${site.out}`);
