@@ -5,5 +5,5 @@
  "dependencies": {
   "playwright": "^1.41.0",
   "sharp": "^0.33.0"
-},
+}
 }
