@@ -68,4 +68,9 @@ async function capture(page, site) {
     console.error("Missing screenshots:", missing);
     process.exit(2);
   }
+
+  // 캐시 리프레시용 버전 파일 생성 (6시간마다 바뀌게)
+const version = String(Date.now()); // ms 타임스탬프
+fs.writeFileSync("docs/version.json", JSON.stringify({ v: version }, null, 2));
+console.log("[version] docs/version.json saved:", version);
 })();
