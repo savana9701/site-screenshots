@@ -9,7 +9,7 @@ const SITES = [
 ];
 
 // PC 기준 viewport
-const VIEWPORT = { width: 1440, height: 900 };
+const VIEWPORT = { width: 1920, height: 900 };
 const SCALE = 1;
 
 if (!fs.existsSync("docs")) fs.mkdirSync("docs", { recursive: true });
@@ -30,13 +30,13 @@ async function capture(page, site) {
   });
 
   // webp로 변환
-  await sharp(tmp)
-    .webp({ quality: 70 })
-    .toFile(site.out);
-
-  fs.unlinkSync(tmp);
-
-  console.log(`[${site.name}] saved: ${site.out}`);
+ await sharp(tmp)
+  .resize({
+    width: 900,
+    withoutEnlargement: true
+  })
+  .webp({ quality: 70 })
+  .toFile(site.out);
 }
 
 (async () => {
