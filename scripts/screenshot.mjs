@@ -8,8 +8,8 @@ const SITES = [
 ];
 
 // 공통 옵션 (캡쳐 비율)
-const VIEWPORT = { width: 1400, height: 900 };
-const SCALE = 2;
+const VIEWPORT = { width: 900, height: 900 };
+const SCALE = 1;
 
 // docs 폴더 없으면 생성
 if (!fs.existsSync("docs")) fs.mkdirSync("docs", { recursive: true });
@@ -30,7 +30,7 @@ await page.goto(site.url, { waitUntil: "domcontentloaded", timeout: 60000 });
     path: site.out,
     fullPage: true,
     type: "jpeg",
-    quality: 78, // 용량 줄이기(추천). 더 선명 원하면 82~85
+    quality: 72, // 용량 줄이기(추천)
   });
 
   console.log(`[${site.name}] saved: ${site.out}`);
