@@ -1,45 +1,58 @@
 import { chromium } from "playwright";
 import fs from "fs";
+import path from "path";
+import sharp from "sharp";
 
 const SITES = [
-  { name: "intramagazine", url: "https://intramagazine.com/", out: "docs/intramagazine.jpg" },
-  { name: "issueday",      url: "https://xn--2n1b69z8udca.com/", out: "docs/issueday.jpg" },
-  { name: "kpoppst",       url: "https://kppost.com/", out: "docs/kpoppst.jpg" },
+  { name: "intramagazine", url: "https://intramagazine.com/", out: "docs/intramagazine.webp" },
+  { name: "issueday",      url: "https://xn--2n1b69z8udca.com/", out: "docs/issueday.webp" },
+  { name: "kpoppst",       url: "https://kppost.com/", out: "docs/kpoppst.webp" },
 ];
 
-// 공통 옵션 (캡쳐 비율)
+// 공통 옵션
 const VIEWPORT = { width: 900, height: 900 };
 const SCALE = 1;
 
-// docs 폴더 없으면 생성
+// 변환 옵션 (여기만 조절하면 됨)
+const OUT_WIDTH = 900;      //  webp 가로폭
+const WEBP_QUALITY = 72;    // 60~80 사이 추천
+
 if (!fs.existsSync("docs")) fs.mkdirSync("docs", { recursive: true });
 
 async function capture(page, site) {
   console.log(`\n[${site.name}] goto: ${site.url}`);
 
   await page.setViewportSize(VIEWPORT);
-await page.goto(site.url, { waitUntil: "domcontentloaded", timeout: 60000 });
-  await page.waitForTimeout(3000);
+  await page.goto(site.url, { waitUntil: "domcontentloaded", timeout: 60000 });
 
+  // 로딩 안정화
+  await page.waitForTimeout(2500);
 
-  // 로딩 안정화 (폰트/이미지 늦게 뜨는 사이트 대비)
-  await page.waitForTimeout(1500);
+  // 임시 png 경로
+  const tmpPng = site.out.replace(/\.webp$/i, ".tmp.png");
 
-  // 메인 첫 화면만 캡처 (fullPage: false)
-   await page.screenshot({
-    path: site.out,
+  // 1) fullPage png 캡쳐
+  await page.screenshot({
+    path: tmpPng,
     fullPage: true,
-    type: "jpeg",
-    quality: 72, // 용량 줄이기(추천)
+    type: "png",
   });
+
+  // 2) sharp로 리사이즈 + webp 변환
+  // - height는 자동 비율 유지(안 넣는 게 좋음)
+  await sharp(tmpPng)
+    .resize({ width: OUT_WIDTH, withoutEnlargement: true })
+    .webp({ quality: WEBP_QUALITY })
+    .toFile(site.out);
+
+  // 3) 임시파일 삭제
+  fs.unlinkSync(tmpPng);
 
   console.log(`[${site.name}] saved: ${site.out}`);
 }
 
 (async () => {
-  const browser = await chromium.launch({
-    args: ["--no-sandbox"],
-  });
+  const browser = await chromium.launch({ args: ["--no-sandbox"] });
 
   const context = await browser.newContext({
     deviceScaleFactor: SCALE,
@@ -52,13 +65,11 @@ await page.goto(site.url, { waitUntil: "domcontentloaded", timeout: 60000 });
       await capture(page, site);
     } catch (e) {
       console.error(`[${site.name}] FAILED:`, e?.message || e);
-      // 한 사이트 실패해도 다음 사이트 계속 진행
     }
   }
 
   await browser.close();
 
-  // 결과 파일 존재 체크
   const missing = SITES.filter(s => !fs.existsSync(s.out)).map(s => s.out);
   if (missing.length) {
     console.error("Missing screenshots:", missing);
