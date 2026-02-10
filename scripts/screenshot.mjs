@@ -1,6 +1,5 @@
 import { chromium } from "playwright";
 import fs from "fs";
-import path from "path";
 import sharp from "sharp";
 
 const SITES = [
@@ -9,44 +8,33 @@ const SITES = [
   { name: "kpoppst",       url: "https://kppost.com/", out: "docs/kpoppst.webp" },
 ];
 
-// 공통 옵션
-const VIEWPORT = { width: 900, height: 900 };
+// PC 기준 viewport
+const VIEWPORT = { width: 1440, height: 900 };
 const SCALE = 1;
-
-// 변환 옵션 (여기만 조절하면 됨)
-const OUT_WIDTH = 900;      //  webp 가로폭
-const WEBP_QUALITY = 72;    // 60~80 사이 추천
 
 if (!fs.existsSync("docs")) fs.mkdirSync("docs", { recursive: true });
 
 async function capture(page, site) {
   console.log(`\n[${site.name}] goto: ${site.url}`);
 
-  await page.setViewportSize(VIEWPORT);
   await page.goto(site.url, { waitUntil: "domcontentloaded", timeout: 60000 });
-
-  // 로딩 안정화
   await page.waitForTimeout(2500);
 
-  // 임시 png 경로
-  const tmpPng = site.out.replace(/\.webp$/i, ".tmp.png");
+  // fullPage PNG(원본)로 먼저 저장(중간파일)
+  const tmp = site.out.replace(/\.webp$/i, ".png");
 
-  // 1) fullPage png 캡쳐
   await page.screenshot({
-    path: tmpPng,
+    path: tmp,
     fullPage: true,
     type: "png",
   });
 
-  // 2) sharp로 리사이즈 + webp 변환
-  // - height는 자동 비율 유지(안 넣는 게 좋음)
-  await sharp(tmpPng)
-    .resize({ width: OUT_WIDTH, withoutEnlargement: true })
-    .webp({ quality: WEBP_QUALITY })
+  // webp로 변환
+  await sharp(tmp)
+    .webp({ quality: 70 })
     .toFile(site.out);
 
-  // 3) 임시파일 삭제
-  fs.unlinkSync(tmpPng);
+  fs.unlinkSync(tmp);
 
   console.log(`[${site.name}] saved: ${site.out}`);
 }
@@ -54,8 +42,12 @@ async function capture(page, site) {
 (async () => {
   const browser = await chromium.launch({ args: ["--no-sandbox"] });
 
+  // 여기서 PC로 강제
   const context = await browser.newContext({
+    viewport: VIEWPORT,
     deviceScaleFactor: SCALE,
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
   });
 
   const page = await context.newPage();
