@@ -18,8 +18,50 @@ async function capture(page, site) {
 
   await page.setViewportSize(VIEWPORT);
 
-  await page.goto(site.url, { waitUntil: "networkidle", timeout: 60000 });
+  await page.goto(site.url, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(1500);
+
+  await page.evaluate(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    document.querySelectorAll('img[loading="lazy"]').forEach((img) => {
+      try { img.loading = "eager"; } catch (e) {}
+    });
+
+    const step = Math.floor(window.innerHeight * 0.85);
+    for (let y = 0; y < document.body.scrollHeight; y += step) {
+      window.scrollTo(0, y);
+      await sleep(350);
+      document.querySelectorAll('img[loading="lazy"]').forEach((img) => {
+        try { img.loading = "eager"; } catch (e) {}
+      });
+    }
+    window.scrollTo(0, 0);
+    await sleep(500);
+
+    const imgs = Array.from(document.images || []);
+    await Promise.all(
+      imgs.map(async (img) => {
+        try { img.loading = "eager"; } catch (e) {}
+
+        if (img.complete && img.naturalWidth > 0) {
+          if (img.decode) {
+            try { await img.decode(); } catch (e) {}
+          }
+          return;
+        }
+
+        await Promise.race([
+          new Promise((res) => img.addEventListener("load", res, { once: true })),
+          new Promise((res) => img.addEventListener("error", res, { once: true })),
+          sleep(5000),
+        ]);
+
+        if (img.decode) {
+          try { await img.decode(); } catch (e) {}
+        }
+      })
+    );
+  });
 
   const tmp = site.out.replace(/\.webp$/i, ".png");
 
@@ -42,7 +84,7 @@ async function capture(page, site) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ args: ["--no-sandbox"] });
+  const browser = await chromium.launch({ args: ["--no-sandbox", "--disable-dev-shm-usage"] });
 
   const context = await browser.newContext({
     viewport: VIEWPORT,
