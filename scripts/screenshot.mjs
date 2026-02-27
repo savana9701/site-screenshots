@@ -24,34 +24,41 @@ async function capture(page, site) {
   await page.evaluate(async () => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-    const fixLazy = () => {
+    const applyLazyAttrs = () => {
       const imgs = Array.from(document.querySelectorAll("img"));
       for (const img of imgs) {
         try { img.loading = "eager"; } catch (e) {}
 
-        const ds = img.dataset || {};
-        const candidates = [
-          ds.src,
-          ds.lazySrc,
-          ds.lazy,
-          ds.original,
-          ds.url,
-          ds.imgUrl,
-          ds.bg,
-          ds.background,
-          ds.backgroundImage,
-          img.getAttribute("data-src"),
-          img.getAttribute("data-lazy-src"),
-          img.getAttribute("data-original"),
-          img.getAttribute("data-url"),
-        ].filter(Boolean);
+        const getAttr = (n) => img.getAttribute(n);
+        const setAttr = (n, v) => { try { img.setAttribute(n, v); } catch (e) {} };
 
-        if (candidates.length) {
-          const u = candidates[0];
-          if (!img.getAttribute("src") || img.getAttribute("src") === "" || img.getAttribute("src")?.startsWith("data:")) {
-            try { img.setAttribute("src", u); } catch (e) {}
-          }
-          try { img.removeAttribute("srcset"); } catch (e) {}
+        const lazySrc =
+          (img.dataset && (img.dataset.lazySrc || img.dataset.src || img.dataset.original || img.dataset.url)) ||
+          getAttr("data-lazy-src") ||
+          getAttr("data-src") ||
+          getAttr("data-original") ||
+          getAttr("data-url");
+
+        const lazySrcset =
+          (img.dataset && (img.dataset.lazySrcset || img.dataset.srcset)) ||
+          getAttr("data-lazy-srcset") ||
+          getAttr("data-srcset");
+
+        const lazySizes =
+          (img.dataset && (img.dataset.sizes)) ||
+          getAttr("data-sizes");
+
+        const curSrc = getAttr("src") || "";
+        if (lazySrc && (!curSrc || curSrc.startsWith("data:"))) {
+          setAttr("src", lazySrc);
+        }
+
+        if (lazySrcset && !getAttr("srcset")) {
+          setAttr("srcset", lazySrcset);
+        }
+
+        if (lazySizes && !getAttr("sizes")) {
+          setAttr("sizes", lazySizes);
         }
 
         try { img.classList.remove("lazyload"); } catch (e) {}
@@ -95,51 +102,47 @@ async function capture(page, site) {
       try { window.dispatchEvent(new Event("resize")); } catch (e) {}
     };
 
-    fixLazy();
+    applyLazyAttrs();
 
     let lastH = 0;
     let stable = 0;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 24; i++) {
       window.scrollTo(0, document.body.scrollHeight);
-      fixLazy();
+      applyLazyAttrs();
       await sleep(900);
+
       const h = document.body.scrollHeight || 0;
       if (Math.abs(h - lastH) < 5) stable += 1;
       else stable = 0;
       lastH = h;
+
       if (stable >= 3) break;
     }
 
     const step = Math.floor(window.innerHeight * 0.85);
-    let y = 0;
-    for (let i = 0; i < 200; i++) {
-      const h = document.body.scrollHeight || 0;
-      if (y > h) break;
+    for (let y = 0; y < (document.body.scrollHeight || 0) + step; y += step) {
       window.scrollTo(0, y);
-      fixLazy();
-      y += step;
-      await sleep(400);
+      applyLazyAttrs();
+      await sleep(450);
     }
 
     window.scrollTo(0, 0);
-    fixLazy();
+    applyLazyAttrs();
     await sleep(700);
 
     const imgs2 = Array.from(document.images || []);
     await Promise.all(
       imgs2.map(async (img) => {
         try { img.loading = "eager"; } catch (e) {}
-
         if (img.decode) {
           try { await img.decode(); } catch (e) {}
         }
-
         if (img.complete && img.naturalWidth > 0) return;
 
         await Promise.race([
           new Promise((res) => img.addEventListener("load", res, { once: true })),
           new Promise((res) => img.addEventListener("error", res, { once: true })),
-          sleep(8000),
+          sleep(10000),
         ]);
 
         if (img.decode) {
@@ -148,6 +151,9 @@ async function capture(page, site) {
       })
     );
   });
+
+  await page.waitForLoadState("networkidle").catch(() => {});
+  await page.waitForTimeout(700);
 
   const tmp = site.out.replace(/\.webp$/i, ".png");
 
