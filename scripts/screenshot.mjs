@@ -18,42 +18,128 @@ async function capture(page, site) {
 
   await page.setViewportSize(VIEWPORT);
 
-  await page.goto(site.url, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.goto(site.url, { waitUntil: "load", timeout: 60000 });
   await page.waitForTimeout(1500);
 
   await page.evaluate(async () => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    document.querySelectorAll('img[loading="lazy"]').forEach((img) => {
-      try { img.loading = "eager"; } catch (e) {}
-    });
+
+    const fixLazy = () => {
+      const imgs = Array.from(document.querySelectorAll("img"));
+      for (const img of imgs) {
+        try { img.loading = "eager"; } catch (e) {}
+
+        const ds = img.dataset || {};
+        const candidates = [
+          ds.src,
+          ds.lazySrc,
+          ds.lazy,
+          ds.original,
+          ds.url,
+          ds.imgUrl,
+          ds.bg,
+          ds.background,
+          ds.backgroundImage,
+          img.getAttribute("data-src"),
+          img.getAttribute("data-lazy-src"),
+          img.getAttribute("data-original"),
+          img.getAttribute("data-url"),
+        ].filter(Boolean);
+
+        if (candidates.length) {
+          const u = candidates[0];
+          if (!img.getAttribute("src") || img.getAttribute("src") === "" || img.getAttribute("src")?.startsWith("data:")) {
+            try { img.setAttribute("src", u); } catch (e) {}
+          }
+          try { img.removeAttribute("srcset"); } catch (e) {}
+        }
+
+        try { img.classList.remove("lazyload"); } catch (e) {}
+        try { img.classList.add("lazyloaded"); } catch (e) {}
+      }
+
+      const sources = Array.from(document.querySelectorAll("source"));
+      for (const s of sources) {
+        const ds = s.dataset || {};
+        const u =
+          ds.srcset ||
+          ds.src ||
+          s.getAttribute("data-srcset") ||
+          s.getAttribute("data-src");
+        if (u) {
+          try { s.setAttribute("srcset", u); } catch (e) {}
+        }
+      }
+
+      const bgEls = Array.from(document.querySelectorAll("[data-bg],[data-background],[data-background-image],[data-src]"));
+      for (const el of bgEls) {
+        const ds = el.dataset || {};
+        const u =
+          ds.bg ||
+          ds.background ||
+          ds.backgroundImage ||
+          ds.src ||
+          el.getAttribute("data-bg") ||
+          el.getAttribute("data-background") ||
+          el.getAttribute("data-background-image") ||
+          el.getAttribute("data-src");
+        if (u) {
+          const style = getComputedStyle(el);
+          if (!style.backgroundImage || style.backgroundImage === "none") {
+            try { el.style.backgroundImage = `url("${u}")`; } catch (e) {}
+          }
+        }
+      }
+
+      try { window.dispatchEvent(new Event("scroll")); } catch (e) {}
+      try { window.dispatchEvent(new Event("resize")); } catch (e) {}
+    };
+
+    fixLazy();
+
+    let lastH = 0;
+    let stable = 0;
+    for (let i = 0; i < 20; i++) {
+      window.scrollTo(0, document.body.scrollHeight);
+      fixLazy();
+      await sleep(900);
+      const h = document.body.scrollHeight || 0;
+      if (Math.abs(h - lastH) < 5) stable += 1;
+      else stable = 0;
+      lastH = h;
+      if (stable >= 3) break;
+    }
 
     const step = Math.floor(window.innerHeight * 0.85);
-    for (let y = 0; y < document.body.scrollHeight; y += step) {
+    let y = 0;
+    for (let i = 0; i < 200; i++) {
+      const h = document.body.scrollHeight || 0;
+      if (y > h) break;
       window.scrollTo(0, y);
-      await sleep(350);
-      document.querySelectorAll('img[loading="lazy"]').forEach((img) => {
-        try { img.loading = "eager"; } catch (e) {}
-      });
+      fixLazy();
+      y += step;
+      await sleep(400);
     }
-    window.scrollTo(0, 0);
-    await sleep(500);
 
-    const imgs = Array.from(document.images || []);
+    window.scrollTo(0, 0);
+    fixLazy();
+    await sleep(700);
+
+    const imgs2 = Array.from(document.images || []);
     await Promise.all(
-      imgs.map(async (img) => {
+      imgs2.map(async (img) => {
         try { img.loading = "eager"; } catch (e) {}
 
-        if (img.complete && img.naturalWidth > 0) {
-          if (img.decode) {
-            try { await img.decode(); } catch (e) {}
-          }
-          return;
+        if (img.decode) {
+          try { await img.decode(); } catch (e) {}
         }
+
+        if (img.complete && img.naturalWidth > 0) return;
 
         await Promise.race([
           new Promise((res) => img.addEventListener("load", res, { once: true })),
           new Promise((res) => img.addEventListener("error", res, { once: true })),
-          sleep(5000),
+          sleep(8000),
         ]);
 
         if (img.decode) {
