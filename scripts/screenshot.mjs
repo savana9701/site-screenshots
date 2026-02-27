@@ -13,13 +13,25 @@ const SCALE = 1;
 
 if (!fs.existsSync("docs")) fs.mkdirSync("docs", { recursive: true });
 
+function withNoRocket(url) {
+  const u = new URL(url);
+  if (!u.searchParams.has("nowprocket")) u.searchParams.set("nowprocket", "1");
+  return u.toString();
+}
+
 async function capture(page, site) {
   console.log(`\n[${site.name}] goto: ${site.url}`);
 
   await page.setViewportSize(VIEWPORT);
 
-  await page.goto(site.url, { waitUntil: "load", timeout: 60000 });
+  const targetUrl = withNoRocket(site.url);
+
+  await page.goto(targetUrl, { waitUntil: "load", timeout: 60000 });
   await page.waitForTimeout(1500);
+
+  try { await page.mouse.move(10, 10); } catch (e) {}
+  try { await page.mouse.wheel(0, 300); } catch (e) {}
+  await page.waitForTimeout(500);
 
   await page.evaluate(async () => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -106,7 +118,7 @@ async function capture(page, site) {
 
     let lastH = 0;
     let stable = 0;
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < 30; i++) {
       window.scrollTo(0, document.body.scrollHeight);
       applyLazyAttrs();
       await sleep(900);
